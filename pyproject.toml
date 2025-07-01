@@ -1,0 +1,15 @@
+[project]
+name = "jz-cli"
+version = "0.1.0"
+description = "CLI helper for Jean Zay SLURM cluster"
+readme = "README.md"
+authors = [{ name = "alex-bene", email = "alexandrosbene@gmail.com" }]
+requires-python = ">=3.8"
+dependencies = ["typer[all]", "rich"]
+
+[project.scripts]
+jz = "jz_cli.main:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
