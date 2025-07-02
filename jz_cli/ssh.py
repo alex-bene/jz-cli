@@ -5,11 +5,15 @@ from typing import Optional
 
 import typer
 
-from .config import get_remote_user
+from .config import get_value
 
 app = typer.Typer(
     help="""SSH tool for persistent connection and remote command execution."""
 )
+
+
+def get_remote_user() -> str:
+    return get_value("remote_user")
 
 
 def _get_socket_path() -> Path:

@@ -3,7 +3,7 @@
 
 import typer
 
-from .config import set_remote_user
+from .config import set_value
 
 app = typer.Typer(help="First-time configuration for the jz CLI.")
 
@@ -18,7 +18,9 @@ def setup():
     username = typer.prompt(
         "Enter your remote user for Jean Zay (it will be used as `ssh [remote_user]`)"
     )
-    set_remote_user(username)
+    set_value("remote_user", username)
+
+    account = typer.prompt("Enter your account id to use in Jean Zay")
+    set_value("account", account)
 
     typer.echo("\n✅ Setup complete.")
-    typer.echo(f"Saved remote_user = '{username}'")

@@ -31,14 +31,13 @@ def save_config(config: dict):
         json.dump(config, f, indent=2)
 
 
-def get_remote_user() -> str:
-    config = get_config()
-    return config.get("remote_user", "jz")  # Default fallback
+def get_value(key: str) -> str:
+    return get_config().get(key)
 
 
-def set_remote_user(username: str):
+def set_value(key: str, username: str):
     config = get_config()
-    config["remote_user"] = username
+    config[key] = username
     save_config(config)
 
 
@@ -80,7 +79,23 @@ def remote_user(
     Show or set the remote user (Jean Zay login).
     """
     if value:
-        set_remote_user(value)
+        set_value("remote_user", value)
         typer.echo(f"✅ remote_user set to '{value}'")
     else:
-        typer.echo(f"👤 remote_user: {get_remote_user()}")
+        typer.echo(f"👤 remote_user: {get_value('remote_user')}")
+
+
+@app.command()
+def account(
+    value: str = typer.Option(
+        None, "--set", help="Set account. If not provided, just show it."
+    ),
+):
+    """
+    Show or set the account to use (Jean Zay login).
+    """
+    if value:
+        set_value("account", value)
+        typer.echo(f"✅ account set to '{value}'")
+    else:
+        typer.echo(f"👤 account: {get_value('account')}")

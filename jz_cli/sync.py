@@ -6,7 +6,7 @@ from typing import List, Optional
 
 import typer
 
-from .config import get_remote_user
+from .config import get_value
 from .ssh import get_ssh_opts, run
 
 app = typer.Typer(help="Sync local code to Jean Zay cluster.")
@@ -31,7 +31,7 @@ def sync(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
 ):
     """Sync local directory to Jean Zay via rsync."""
-    remote_user = get_remote_user()
+    remote_user = get_value("remote_user")
 
     if remote_base_dir is None:
         remote_base_dir = get_remote_base_dir(local_dir)
