@@ -16,13 +16,28 @@ from jz_cli.sync import get_remote_base_dir
 
 app = typer.Typer(help="SLURM-specific commands.")
 
+# TODO:
+# add command to create interactive terminal with srun
+
+
+@app.command(
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True}
+)
+def node_run(
+    job_id: Optional[int] = typer.Argument(..., help="Job ID to run command on"),
+    command: str = typer.Argument(..., help="Command to run on the allocated node"),
+):
+    """Run command on allocated node based on job id. (accepts any srun options)"""
+    cmd = f"srun --jobid {job_id} --overlap --ntasks=1 {command}"
+    typer.echo(run(cmd, login_shell=True))
+
 
 @app.command(
     context_settings={"ignore_unknown_options": True, "allow_extra_args": True}
 )
 def queue(ctx: typer.Context):
     """Show job queue for user. (accepts any squeue options)"""
-    cmd = "squeue -u \\$USER " + " ".join(ctx.args)
+    cmd = "squeue -lu \\$USER " + " ".join(ctx.args)
     typer.echo(run(cmd, login_shell=True))
 
 
@@ -77,7 +92,7 @@ class A100Resource(GPUResource):
     partition: str = field(init=False, default="gpu_p5")
     constraint: str = field(init=False, default="a100")
     cpus_per_task: int = field(init=False, default=8)
-    module_load: str = field(init=False, default="module load arch/a100")
+    module_load: str = field(init=False, default="arch/a100")
     max_gpus: int = field(init=False, default=8)
 
     def __post_init__(self):
@@ -90,7 +105,7 @@ class H100Resource(GPUResource):
     partition: str = field(init=False, default="gpu_p6,gpu_p6s")
     constraint: str = field(init=False, default="h100")
     cpus_per_task: int = field(init=False, default=24)
-    module_load: str = field(init=False, default="module load arch/h100")
+    module_load: str = field(init=False, default="arch/h100")
     max_gpus: int = field(init=False, default=4)
 
     def __post_init__(self):
@@ -139,7 +154,7 @@ def batch(
     hint: str = typer.Option("nomultithread", "--hint", help="Hint for the job"),
     num_of_gpus: int = typer.Option(1, "--num-of-gpus", help="Number of GPUs"),
     module_load: list[str] = typer.Option(
-        [""], "--module-load", help="Modules to load (can repeat)"
+        [], "--module-load", help="Modules to load (can repeat)"
     ),
     script: str = typer.Option(None, "--script", help="Script to run"),
     gpu_type: str = typer.Option(
@@ -166,7 +181,10 @@ def batch(
         raise ValueError(f"Invalid gpu_type: {gpu_type}")
 
     if module_load:
-        module_load = partition.module_load + "\n" + "\n".join(module_load)
+        module_load = (
+            [partition.module_load] if partition.module_load else []
+        ) + module_load
+        module_load = "module load " + "\nmodule load ".join(module_load)
 
     num_of_nodes = partition.calc_nodes(num_of_gpus)
     gpus_per_node = num_of_gpus if num_of_nodes == 1 else partition.max_gpus
@@ -186,6 +204,8 @@ def batch(
 # Cleans out the modules loaded in interactive and inherited by default
 module purge
 {module_load}
+
+cd {get_remote_base_dir(os.getcwd())}
 
 # Echo of launched commands 
 set -x

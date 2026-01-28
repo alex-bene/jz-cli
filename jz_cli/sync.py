@@ -26,7 +26,7 @@ def sync(
         None, "--exclude", "-e", help="Additional rsync exclude patterns (can repeat)"
     ),
     delete: bool = typer.Option(
-        True, "--delete", help="Delete files that are not in the source directory"
+        False, "--delete", help="Delete files that are not in the source directory"
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
 ):
@@ -39,8 +39,8 @@ def sync(
     default_excludes = [
         ".git",
         "__pycache__",
+        ".ruff_cache",
         ".venv",
-        ".python-version",
         "uv.lock",
     ]
     all_excludes = default_excludes + (exclude or [])
