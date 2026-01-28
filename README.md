@@ -1,8 +1,14 @@
 # jz-cli
 
+[![pre-commit.ci status](https://results.pre-commit.ci/badge/github/alex-bene/jz-cli/main.svg)](https://results.pre-commit.ci/latest/github/alex-bene/jz-cli/main)
+[![Development Status](https://img.shields.io/badge/status-beta-orange)](https://github.com/alex-bene/jz-cli)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A command-line interface (CLI) helper for the Jean Zay SLURM cluster at IDRIS.
 
-This CLI simplifies common tasks such as syncing files, managing SSH connections, and interacting with the SLURM scheduler and IDRIS-specific commands.
+This [`typer`](https://typer.tiangolo.com/)-based CLI simplifies common tasks such as syncing files, managing SSH connections, and interacting with the SLURM scheduler and IDRIS-specific commands.
 
 ## Features
 
@@ -125,4 +131,32 @@ jz config remote-user --set my-new-username
 
 ## Development
 
-This project is implemented using `typer` for the CLI.
+To contribute to this project, please ensure you have `uv` installed.
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/alex-bene/jz-cli.git
+   cd jz-cli
+   ```
+
+2. Install dependencies and pre-commit hooks:
+   ```bash
+   uv sync
+   uv run pre-commit install
+   ```
+
+3. Run checks manually (optional):
+   ```bash
+   uv run ruff check
+   uv run ruff format
+   ```
+
+This project uses [Ruff](https://github.com/astral-sh/ruff) for linting and formatting. We use [pre-commit](https://pre-commit.com/) hooks to ensure code quality.
+
+- **Local**: Hooks run before every commit (requires `pre-commit install`).
+- **GitHub Actions**: Runs on every push to **auto-fix** issues on all branches.
+- **pre-commit.ci**: Runs on every push to **check** code quality (fixes are handled by the GitHub Action).
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).

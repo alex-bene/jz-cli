@@ -2,14 +2,32 @@
 name = "jz-cli"
 version = "0.1.0"
 description = "CLI helper for Jean Zay SLURM cluster"
+keywords = ["tools", "jean-zay", "slurm"]
 readme = "README.md"
 authors = [{ name = "alex-bene", email = "alexandrosbene@gmail.com" }]
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+]
 requires-python = ">=3.8"
 dependencies = ["typer[all]", "rich"]
 
 [project.scripts]
 jz = "jz_cli.main:app"
 
+[dependency-groups]
+dev = ["pre-commit>=3.5.0", "ruff>=0.13.3"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[project.urls]
+Homepage = "https://github.com/alex-bene/jz-cli"
+Repository = "https://github.com/alex-bene/jz-cli"
+
+[tool.pyright]
+exclude = ["**/__pycache__", "**/.*"]
+typeCheckingMode = "off"
