@@ -1,7 +1,6 @@
-# jz/idris.py
+"""IDRIS-specific commands for jz_cli."""
 
-
-from typing import Optional
+from __future__ import annotations
 
 import typer
 
@@ -11,15 +10,13 @@ app = typer.Typer(help="IDRIS-specific commands.")
 
 
 @app.command()
-def allocations(
-    summary: bool = typer.Option(False, "--summary", "-s", help="Summarize output"),
-):
+def allocations(summary: bool = typer.Option(False, "--summary", "-s", help="Summarize output")) -> None:
     """Indicate the CPU and/or GPU hours allocations."""
     typer.echo(run("idracct" + (" -s" if summary else ""), login_shell=True))
 
 
 @app.command()
-def projects():
+def projects() -> None:
     """Display the projects or change the default project."""
     typer.echo(run("idrproj", login_shell=True))
 
@@ -27,15 +24,10 @@ def projects():
 @app.command()
 def consumption(
     short: bool = typer.Option(
-        False,
-        "--short",
-        "-s",
-        help="Display the status of your accounts without the disclaimer",
+        False, "--short", "-s", help="Display the status of your accounts without the disclaimer"
     ),
-    accounts: Optional[list[str]] = typer.Option(
-        None, "--accounts", "-A", help="Display the status of specific accounts"
-    ),
-):
+    accounts: list[str] | None = typer.Option(None, "--accounts", "-A", help="Display the status of specific accounts"),
+) -> None:
     """Verify the consumption status of your project."""
     cmd = "idr_compuse"
     if short:
@@ -47,25 +39,23 @@ def consumption(
 
 @app.command()
 def disk_quota(
-    project: Optional[str] = typer.Option(
+    project: str | None = typer.Option(
         None,
         "--project",
         "-p",
-        help="Show the given project. When not provided, shows your active project. Mutually exclusive with the --all-projects flag.",
+        help=(
+            "Show the given project. When not provided, shows your active project. "
+            "Mutually exclusive with the --all-projects flag."
+        ),
     ),
-    all_projects: Optional[bool] = typer.Option(
-        False,
-        "--all-projects",
-        "-a",
-        help="Show all projects. Mutually exclusive with the --project flag.",
+    all_projects: bool | None = typer.Option(
+        False, "--all-projects", "-a", help="Show all projects. Mutually exclusive with the --project flag."
     ),
-    space: Optional[list[str]] = typer.Option(
+    space: list[str] | None = typer.Option(
         None, "--space", "-s", help="Filter the output for the given disk space(s)."
     ),
-    json: Optional[bool] = typer.Option(
-        False, "--json", "-j", help="Display a json formatted data"
-    ),
-):
+    json: bool | None = typer.Option(False, "--json", "-j", help="Display a json formatted data"),
+) -> None:
     """Show quota disk infos (home/work/store)."""
     cmd = "idr_quota_user"
     if project is not None:

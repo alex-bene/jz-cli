@@ -1,13 +1,13 @@
-# jz/idris.py
+"""SLURM-specific commands for jz_cli."""
 
+from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
+from pathlib import Path
 
 import typer
-from rich import print
+from rich import print as rprint
 from rich.syntax import Syntax
 
 from jz_cli.config import get_value
@@ -16,46 +16,42 @@ from jz_cli.sync import get_remote_base_dir
 
 app = typer.Typer(help="SLURM-specific commands.")
 
-# TODO:
-# add command to create interactive terminal with srun
 
-
-@app.command(
-    context_settings={"ignore_unknown_options": True, "allow_extra_args": True}
-)
+@app.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
 def node_run(
-    job_id: Optional[int] = typer.Argument(..., help="Job ID to run command on"),
+    job_id: int | None = typer.Argument(..., help="Job ID to run command on"),
     command: str = typer.Argument(..., help="Command to run on the allocated node"),
-):
-    """Run command on allocated node based on job id. (accepts any srun options)"""
+) -> None:
+    """Run command on allocated node based on job id. (accepts any srun options)."""
     cmd = f"srun --jobid {job_id} --overlap --ntasks=1 {command}"
     typer.echo(run(cmd, login_shell=True))
 
 
-@app.command(
-    context_settings={"ignore_unknown_options": True, "allow_extra_args": True}
-)
-def queue(ctx: typer.Context):
-    """Show job queue for user. (accepts any squeue options)"""
-    cmd = "squeue -lu \\$USER " + " ".join(ctx.args)
+@app.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
+def queue(ctx: typer.Context) -> None:
+    """Show job queue for user. (accepts any squeue options)."""
+    cmd = 'squeue -u \\$USER -o "%10i %9P %16j %2t %10M %10L %5D %15b %14N %R"' + " ".join(ctx.args)
     typer.echo(run(cmd, login_shell=True))
 
 
-@app.command(
-    context_settings={"ignore_unknown_options": True, "allow_extra_args": True}
-)
+@app.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
+def info(ctx: typer.Context) -> None:
+    """Show cluster info. (accepts any sinfo options)."""
+    cmd = 'sinfo -O "Partition:15,Available:12,Time:15,NodeAIOT,GRES,Features:35"' + " ".join(ctx.args)
+    typer.echo(run(cmd, login_shell=True))
+
+
+@app.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
 def cancel(
     ctx: typer.Context,
-    job_id: Optional[int] = typer.Argument(None, help="Job ID to cancel"),
-    all: Optional[bool] = typer.Option(
-        False, "--all", "-a", help="Cancel all jobs for the user"
-    ),
-):
-    """Delete job by id or by user. (accepts any squeue options)"""
+    job_id: int | None = typer.Argument(None, help="Job ID to cancel"),
+    all_jobs: bool | None = typer.Option(False, "--all", "-a", help="Cancel all jobs for the user"),
+) -> None:
+    """Delete job by id or by user. (accepts any squeue options)."""
     cmd = "scancel"
     if job_id is not None:
         cmd += f" {job_id}"
-    if job_id is None and all:
+    if job_id is None and all_jobs:
         cmd += " -u \\$USER"
     cmd += " " + " ".join(ctx.args)
     typer.echo(run(cmd, login_shell=True))
@@ -63,6 +59,8 @@ def cancel(
 
 @dataclass
 class GPUResource:
+    """Base class for GPU resource specifications."""
+
     partition: str = field(init=False, default="")
     account: str = field(init=False, default="")
     cpus_per_task: int = field(init=False, default=-1)
@@ -71,6 +69,7 @@ class GPUResource:
     module_load: str = field(init=False, default="")
 
     def to_sbatch(self) -> str:
+        """Return SLURM sbatch directives."""
         out = ""
         if self.partition:
             out += f"#SBATCH --partition={self.partition}\n"
@@ -84,52 +83,63 @@ class GPUResource:
         return out
 
     def calc_nodes(self, num_of_gpus: int) -> int:
+        """Calculate the number of nodes required for the given number of GPUs."""
         return (num_of_gpus + self.max_gpus - 1) // self.max_gpus
 
 
 @dataclass
 class A100Resource(GPUResource):
+    """A100 GPU resource specifications."""
+
     partition: str = field(init=False, default="gpu_p5")
     constraint: str = field(init=False, default="a100")
     cpus_per_task: int = field(init=False, default=8)
     module_load: str = field(init=False, default="arch/a100")
     max_gpus: int = field(init=False, default=8)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
+        """Set account after initialization."""
         account = get_value("account")
         self.account = f"{account}@a100"
 
 
 @dataclass
 class H100Resource(GPUResource):
+    """H100 GPU resource specifications."""
+
     partition: str = field(init=False, default="gpu_p6,gpu_p6s")
     constraint: str = field(init=False, default="h100")
     cpus_per_task: int = field(init=False, default=24)
     module_load: str = field(init=False, default="arch/h100")
     max_gpus: int = field(init=False, default=4)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
+        """Set account after initialization."""
         account = get_value("account")
         self.account = f"{account}@h100"
 
 
 @dataclass
 class V100Resource(GPUResource):
+    """V100 GPU resource specifications."""
+
     partition: str = "gpu_p13"
     gpu_mem: int = 32
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
+        """Set account and other parameters after initialization."""
         account = get_value("account")
         self.account = f"{account}@v100"
 
         if self.gpu_mem not in [16, 32]:
-            raise ValueError("Invalid gpu_mem value, only 16 or 32 are supported")
+            msg = "Invalid gpu_mem value, only 16 or 32 are supported"
+            raise ValueError(msg)
         if self.partition not in ["gpu_p2", "gpu_p13"]:
-            raise ValueError(
-                "Invalid partition value, only gpu_p2 or gpu_p13 are supported"
-            )
+            msg = "Invalid partition value, only gpu_p2 or gpu_p13 are supported"
+            raise ValueError(msg)
         if self.partition == "gpu_p2" and self.gpu_mem != 32:
-            raise ValueError("Invalid gpu_mem value for gpu_p2")
+            msg = "Invalid gpu_mem value for gpu_p2"
+            raise ValueError(msg)
 
         if self.partition == "gpu_p2":
             self.constraint = ""
@@ -153,19 +163,11 @@ def batch(
     time: str = typer.Option("02:00:00", "--time", help="Time limit"),
     hint: str = typer.Option("nomultithread", "--hint", help="Hint for the job"),
     num_of_gpus: int = typer.Option(1, "--num-of-gpus", help="Number of GPUs"),
-    module_load: list[str] = typer.Option(
-        [], "--module-load", help="Modules to load (can repeat)"
-    ),
+    module_load: list[str] = typer.Option([], "--module-load", help="Modules to load (can repeat)"),
     script: str = typer.Option(None, "--script", help="Script to run"),
-    gpu_type: str = typer.Option(
-        "v100-32g",
-        "--gpu-type",
-        help="GPU type (a100, h100, v100-p2, v100-16g, v100-32g)",
-    ),
-    submit_job: bool = typer.Option(
-        False, "--submit-job", help="Submit the job to the cluster"
-    ),
-):
+    gpu_type: str = typer.Option("v100-32g", "--gpu-type", help="GPU type (a100, h100, v100-p2, v100-16g, v100-32g)"),
+    submit_job: bool = typer.Option(False, "--submit-job", help="Submit the job to the cluster"),
+) -> None:
     """Create a SLURM sbatch script."""
     if gpu_type == "a100":
         partition = A100Resource()
@@ -178,12 +180,11 @@ def batch(
     elif gpu_type == "v100-32g":
         partition = V100Resource(gpu_mem=32)
     else:
-        raise ValueError(f"Invalid gpu_type: {gpu_type}")
+        msg = f"Invalid gpu_type: {gpu_type}"
+        raise ValueError(msg)
 
     if module_load:
-        module_load = (
-            [partition.module_load] if partition.module_load else []
-        ) + module_load
+        module_load = ([partition.module_load] if partition.module_load else []) + module_load
         module_load = "module load " + "\nmodule load ".join(module_load)
 
     num_of_nodes = partition.calc_nodes(num_of_gpus)
@@ -205,23 +206,21 @@ def batch(
 module purge
 {module_load}
 
-cd {get_remote_base_dir(os.getcwd())}
+cd {get_remote_base_dir(Path.cwd())}
 
-# Echo of launched commands 
+# Echo of launched commands
 set -x
 
 srun {script}
 """
 
     # Confirm SBATCH script
-    print(Syntax(sbatch_script, "bash", line_numbers=True))
+    rprint(Syntax(sbatch_script, "bash", line_numbers=True))
     typer.confirm("Is the above SBATCH script correct?", abort=True)
 
     # Create file in jz with timestamp
-    current_datetime = str(datetime.now().strftime("%Y%m%d%H%M%S"))
-    filepath = os.path.join(
-        get_remote_base_dir(os.getcwd()), f"sbatch_{current_datetime}.slurm"
-    )
+    current_datetime = str(datetime.now().strftime("%Y%m%d%H%M%S"))  # noqa: DTZ005
+    filepath = get_remote_base_dir(Path.cwd()) / f"sbatch_{current_datetime}.slurm"
     run(f"cat > {filepath} <<EOF\n{sbatch_script}\nEOF")
 
     # Make sure the file exists

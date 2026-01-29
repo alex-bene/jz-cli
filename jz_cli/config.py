@@ -1,4 +1,4 @@
-# jz/config.py
+"""Configuration management for jz_cli."""
 
 import json
 from pathlib import Path
@@ -19,29 +19,34 @@ def _config_path() -> Path:
 
 
 def get_config() -> dict:
+    """Load the configuration from file."""
     path = _config_path()
     if path.exists():
-        with open(path, "r") as f:
+        with path.open() as f:
             return json.load(f)
     return {}
 
 
-def save_config(config: dict):
-    with open(_config_path(), "w") as f:
+def save_config(config: dict) -> None:
+    """Save the configuration to file."""
+    with _config_path().open("w") as f:
         json.dump(config, f, indent=2)
 
 
 def get_value(key: str) -> str:
+    """Get a configuration value."""
     return get_config().get(key)
 
 
-def set_value(key: str, username: str):
+def set_value(key: str, username: str) -> None:
+    """Set a configuration value."""
     config = get_config()
     config[key] = username
     save_config(config)
 
 
-def ensure_config():
+def ensure_config() -> None:
+    """Ensure that a configuration file exists. If not, prompt the user to run setup."""
     if not _config_path().exists():
         typer.echo("🚧 No configuration found.")
         typer.echo("🛠  Please run `jz setup` to configure before using the CLI.")
@@ -52,10 +57,8 @@ app = typer.Typer(help="Inspect or modify jz configuration.")
 
 
 @app.command()
-def show():
-    """
-    Display the full current configuration.
-    """
+def show() -> None:
+    """Display the full current configuration."""
     config = get_config()
     if not config:
         typer.echo("No configuration set yet.")
@@ -71,13 +74,9 @@ def show():
 
 @app.command()
 def remote_user(
-    value: str = typer.Option(
-        None, "--set", help="Set remote_user. If not provided, just show it."
-    ),
-):
-    """
-    Show or set the remote user (Jean Zay login).
-    """
+    value: str = typer.Option(None, "--set", help="Set remote_user. If not provided, just show it."),
+) -> None:
+    """Show or set the remote user (Jean Zay login)."""
     if value:
         set_value("remote_user", value)
         typer.echo(f"✅ remote_user set to '{value}'")
@@ -86,14 +85,8 @@ def remote_user(
 
 
 @app.command()
-def account(
-    value: str = typer.Option(
-        None, "--set", help="Set account. If not provided, just show it."
-    ),
-):
-    """
-    Show or set the account to use (Jean Zay login).
-    """
+def account(value: str = typer.Option(None, "--set", help="Set account. If not provided, just show it.")) -> None:
+    """Show or set the account to use (Jean Zay login)."""
     if value:
         set_value("account", value)
         typer.echo(f"✅ account set to '{value}'")

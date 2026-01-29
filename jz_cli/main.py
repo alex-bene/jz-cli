@@ -1,3 +1,5 @@
+"""Main CLI entry point for jz_cli."""
+
 import typer
 
 from .config import app as config_app
@@ -18,6 +20,7 @@ app.add_typer(slurm_app, name="slurm")
 
 
 @app.callback()
-def main(ctx: typer.Context):
+def main(ctx: typer.Context) -> None:
+    """Jz CLI - Manage your Jean Zay projects and files easily from the command line."""
     if ctx.invoked_subcommand != "setup":
         ensure_config()

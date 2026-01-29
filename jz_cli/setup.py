@@ -1,5 +1,4 @@
-# jz/setupp.py
-
+"""Setup commands for jz_cli."""
 
 import typer
 
@@ -9,15 +8,11 @@ app = typer.Typer(help="First-time configuration for the jz CLI.")
 
 
 @app.command()
-def setup():
-    """
-    Interactive setup wizard for jz.
-    """
+def setup() -> None:
+    """Interactive setup wizard for jz."""
     typer.echo("🛠  Welcome to jz setup!\n")
 
-    username = typer.prompt(
-        "Enter your remote user for Jean Zay (it will be used as `ssh [remote_user]`)"
-    )
+    username = typer.prompt("Enter your remote user for Jean Zay (it will be used as `ssh [remote_user]`)")
     set_value("remote_user", username)
 
     account = typer.prompt("Enter your account id to use in Jean Zay")
