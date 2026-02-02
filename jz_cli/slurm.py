@@ -30,7 +30,7 @@ def node_run(
 @app.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
 def queue(ctx: typer.Context) -> None:
     """Show job queue for user. (accepts any squeue options)."""
-    cmd = 'squeue -u \\$USER -o "%10i %9P %16j %2t %10M %10L %5D %15b %14N %R"' + " ".join(ctx.args)
+    cmd = 'squeue -u \\$USER -o \\"%10i %9P %16j %2t %10M %10L %5D %15b %14N %R\\"' + " " + " ".join(ctx.args)
     typer.echo(run(cmd, login_shell=True))
 
 
