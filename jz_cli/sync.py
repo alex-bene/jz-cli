@@ -22,8 +22,8 @@ def get_remote_base_dir(local_dir: Path) -> Path:
 
 @app.command()
 def sync(
-    local_dir: Path | str = typer.Argument(Path.cwd(), help="Local directory to sync"),
-    remote_base_dir: Path | str | None = typer.Option(None, help="Remote base directory"),
+    local_dir: str = typer.Argument(Path.cwd(), help="Local directory to sync"),
+    remote_base_dir: str | None = typer.Option(None, help="Remote base directory"),
     exclude: list[str] = typer.Option(None, "--exclude", "-e", help="Additional rsync exclude patterns (can repeat)"),
     delete: bool = typer.Option(False, "--delete", help="Delete files that are not in the source directory"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
