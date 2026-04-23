@@ -30,7 +30,7 @@ def node_run(
 @app.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
 def queue(ctx: typer.Context) -> None:
     """Show job queue for user. (accepts any squeue options)."""
-    cmd = 'squeue -u \\$USER -o \\"%10i %9P %16j %2t %10M %10L %5D %15b %14N %R\\"' + " " + " ".join(ctx.args)
+    cmd = 'squeue -u $USER -o "%10i %9P %16j %2t %10M %10L %5D %15b %14N %R"' + " " + " ".join(ctx.args)
     typer.echo(run(cmd, login_shell=True))
 
 
@@ -52,7 +52,7 @@ def cancel(
     if job_id is not None:
         cmd += f" {job_id}"
     if job_id is None and all_jobs:
-        cmd += " -u \\$USER"
+        cmd += " -u $USER"
     cmd += " " + " ".join(ctx.args)
     typer.echo(run(cmd, login_shell=True))
 
@@ -107,7 +107,7 @@ class A100Resource(GPUResource):
 class H100Resource(GPUResource):
     """H100 GPU resource specifications."""
 
-    partition: str = field(init=False, default="gpu_p6,gpu_p6s")
+    partition: str = field(init=False, default="gpu_p6")
     constraint: str = field(init=False, default="h100")
     cpus_per_task: int = field(init=False, default=24)
     module_load: str = field(init=False, default="arch/h100")
@@ -166,6 +166,14 @@ def batch(
     module_load: list[str] = typer.Option([], "--module-load", help="Modules to load (can repeat)"),
     script: str = typer.Option(None, "--script", help="Script to run"),
     gpu_type: str = typer.Option("v100-32g", "--gpu-type", help="GPU type (a100, h100, v100-p2, v100-16g, v100-32g)"),
+    spawn_workers_with_slurm: bool = typer.Option(
+        False,
+        "--spawn-workers-with-slurm/--no-spawn-workers-with-slurm",
+        help=(
+            "Let Slurm spawn one worker task per GPU. Disable this when the script uses "
+            "a launcher like torchrun, accelerate, or deepspeed to spawn GPU workers."
+        ),
+    ),
     submit_job: bool = typer.Option(False, "--submit-job", help="Submit the job to the cluster"),
 ) -> None:
     """Create a SLURM sbatch script."""
@@ -183,12 +191,23 @@ def batch(
         msg = f"Invalid gpu_type: {gpu_type}"
         raise ValueError(msg)
 
+    module_load_cmd = ""
     if module_load:
         module_load = ([partition.module_load] if partition.module_load else []) + module_load
-        module_load = "module load " + "\nmodule load ".join(module_load)
+        module_load_cmd = "module load " + "\nmodule load ".join(module_load)
 
     num_of_nodes = partition.calc_nodes(num_of_gpus)
     gpus_per_node = num_of_gpus if num_of_nodes == 1 else partition.max_gpus
+    if spawn_workers_with_slurm:
+        ntasks = num_of_gpus
+        ntasks_per_node = gpus_per_node
+        ntasks_comment = "total number of Slurm-spawned workers (= total GPUs)"
+        ntasks_per_node_comment = "Slurm tasks per node (= GPUs per node)"
+    else:
+        ntasks = num_of_nodes
+        ntasks_per_node = 1
+        ntasks_comment = "total number of launcher tasks (= one per node)"
+        ntasks_per_node_comment = "one launcher task per node; script spawns GPU workers"
 
     sbatch_script = f"""#!/bin/bash
 #SBATCH --job-name={job_name}             # Name of job
@@ -196,15 +215,15 @@ def batch(
 #SBATCH --hint={hint}
 #SBATCH --output=job_logs/%x_%j.out       # name of output file
 #SBATCH --error=job_logs/%x_%j.err        # name of error file
-#SBATCH --ntasks={num_of_gpus}            # total number of MPI tasks (= total number of GPUs here)
+#SBATCH --ntasks={ntasks}                 # {ntasks_comment}
 #SBATCH --gres=gpu:{gpus_per_node}        # number of GPUs per node (max 8 with gpu_p2, gpu_p5)
-#SBATCH --ntasks-per-node={gpus_per_node} # number of MPI tasks per node (= number of GPUs per node)
+#SBATCH --ntasks-per-node={ntasks_per_node} # {ntasks_per_node_comment}
 #SBATCH --nodes={num_of_nodes}            # number of nodes
 {partition.to_sbatch()}
 
 # Cleans out the modules loaded in interactive and inherited by default
 module purge
-{module_load}
+{module_load_cmd}
 
 cd {get_remote_base_dir(Path.cwd())}
 

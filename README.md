@@ -14,28 +14,27 @@ This [`typer`](https://typer.tiangolo.com/)-based CLI simplifies common tasks su
 
 - **File Synchronization**: Sync your local project directory with the Jean Zay cluster using `rsync`.
 - **Persistent SSH Connections**: Maintain a persistent SSH connection for faster access and command execution.
+- **SCRATCH Timestamp Renewal**: Refresh timestamps under your remote `$SCRATCH`.
 - **SLURM Job Management**: View your job queue and cancel jobs.
 - **IDRIS Resource Management**: Check your resource allocations, project status, and disk quotas.
 
 ## Installation
 
-1.  **Clone the repository:**
+1.  **Install the dependencies:**
+
+    Install with uv (recommended; installs it in an isolated environment).
 
     ```bash
-    git clone https://github.com/your-username/jz-cli.git
-    cd jz-cli
+    uv tool install --python 3.12 git+https://github.com/alex-bene/jz-cli/
     ```
 
-2.  **Install the dependencies:**
-
-    This project uses `uv` for package management.
+    or with pip
 
     ```bash
-    pip install uv
-    uv pip install -e .
+    pip install git+https://github.com/alex-bene/jz-cli/
     ```
 
-3.  **Run the setup:**
+2.  **Run the setup:**
 
     ```bash
     jz setup
@@ -82,6 +81,17 @@ jz ssh run "ls -l"
 # Stop the master connection
 jz ssh stop
 ```
+
+### `jz scratch`
+
+Refresh timestamps under your remote `$SCRATCH`.
+
+```bash
+# Run one immediate renewal
+jz scratch renew
+```
+
+`jz scratch renew` connects over SSH, verifies that `$SCRATCH` is set and points to a remote directory, then runs `touch -c` on each file and directory below it.
 
 ### `jz slurm`
 

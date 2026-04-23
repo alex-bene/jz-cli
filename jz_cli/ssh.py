@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 import subprocess
 import time
 from pathlib import Path
@@ -83,11 +84,9 @@ def run(
 ) -> str:
     """Run a command to jz. If login_shell is True, the command will be run in a login shell (bash -l -c)."""
     start_master_connection()
+    remote_cmd = f"bash -l -c {shlex.quote(cmd)}" if login_shell else cmd
     result = subprocess.run(  # noqa: S603
-        ["ssh", *get_ssh_opts().split(), get_remote_user(), f'bash -l -c "{cmd}"' if login_shell else cmd],
-        check=False,
-        capture_output=True,
-        text=True,
+        ["ssh", *get_ssh_opts().split(), get_remote_user(), remote_cmd], check=False, capture_output=True, text=True
     )
     result.check_returncode()
     return result.stdout.strip()
