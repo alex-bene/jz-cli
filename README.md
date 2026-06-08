@@ -14,6 +14,7 @@ This [`typer`](https://typer.tiangolo.com/)-based CLI simplifies common tasks su
 
 - **File Synchronization**: Sync your local project directory with the Jean Zay cluster using `rsync`.
 - **Persistent SSH Connections**: Maintain a persistent SSH connection for faster access and command execution.
+- **HTTP Proxies Over SSH**: Expose local HTTP endpoints that relay requests to services running on Jean Zay compute nodes.
 - **SCRATCH Timestamp Renewal**: Refresh timestamps under your remote `$SCRATCH`.
 - **SLURM Job Management**: View your job queue and cancel jobs.
 - **IDRIS Resource Management**: Check your resource allocations, project status, and disk quotas.
@@ -40,7 +41,7 @@ This [`typer`](https://typer.tiangolo.com/)-based CLI simplifies common tasks su
     jz setup
     ```
 
-    This will prompt you for your Jean Zay username, which is required for all remote operations.
+    This will prompt you for your Jean Zay username and account id. SSH commands use the configured `remote_user` as the SSH target, and sync commands use it for rsync destinations.
 
 ## Usage
 
@@ -81,6 +82,38 @@ jz ssh run "ls -l"
 # Stop the master connection
 jz ssh stop
 ```
+
+### `jz proxy`
+
+Expose a local HTTP endpoint that relays requests over ordinary SSH to a service running on a Jean Zay compute node.
+
+```bash
+# Expose a generic HTTP service running on the compute node
+jz proxy serve --job-id 123456 --remote-port 8080 --local-port 8000
+
+# Restrict the proxy to a subset of paths
+jz proxy serve --node jzxh033 --remote-port 8080 --allow-prefix /api/
+
+# Target a remote host other than localhost on the compute node
+jz proxy serve --node jzxh033 --remote-host 10.0.0.12 --remote-port 8080
+
+# Allow only GET and POST through the generic proxy
+jz proxy serve --node jzxh033 --remote-port 8080 --allow-method GET --allow-method POST
+
+# Use the OpenAI-specific wrapper for vLLM or another OpenAI-compatible server
+jz proxy openai --job-name vllm-serve --remote-port 8888 --local-port 8000
+```
+
+Notes:
+
+- `jz proxy serve` is a generic HTTP proxy. It is not a raw TCP tunnel.
+- Use exactly one of `--node`, `--job-id`, or `--job-name`.
+- `--allow-method` is repeatable. If omitted, all methods are allowed.
+- `--allow-prefix` is repeatable. If omitted, all paths are allowed.
+- `jz proxy openai` targets `localhost` on the compute node, allows only `GET` and `POST`, only forwards `/v1/` and `/health`, and rejects requests with `"stream": true`.
+- Every proxy also exposes a local health check at `/_jz/health`.
+- This avoids SSH port forwarding, which Jean Zay disables.
+- `--job-id` is safer than `--job-name` if multiple similarly named jobs may be running.
 
 ### `jz scratch`
 
@@ -134,7 +167,7 @@ Manage the CLI configuration.
 # Show the current configuration
 jz config show
 
-# Show or set your remote username
+# Show or set your remote_user
 jz config remote-user
 jz config remote-user --set my-new-username
 ```
