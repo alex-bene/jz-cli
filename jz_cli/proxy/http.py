@@ -27,7 +27,16 @@ HOP_BY_HOP_HEADERS = {
 }
 RESPONSE_HEADER_DENYLIST = HOP_BY_HOP_HEADERS | {"server", "date"}
 LOCAL_HEALTH_PATH = "/_jz/health"
-INNER_SSH_ARGS = ("-o", "StrictHostKeyChecking=accept-new")
+INNER_SSH_ARGS = (
+    "-o",
+    "StrictHostKeyChecking=accept-new",
+    "-o",
+    "ControlMaster=auto",
+    "-o",
+    "ControlPersist=4h",
+    "-o",
+    "ControlPath=~/.ssh/jz-cli-proxy-%C",
+)
 
 JsonResponse = tuple[int, dict[str, object]]
 RequestValidator = Callable[[str, str, bytes], JsonResponse | None]
