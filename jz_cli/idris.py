@@ -12,13 +12,13 @@ app = typer.Typer(help="IDRIS-specific commands.")
 @app.command()
 def allocations(summary: bool = typer.Option(False, "--summary", "-s", help="Summarize output")) -> None:
     """Indicate the CPU and/or GPU hours allocations."""
-    typer.echo(run("idracct" + (" -s" if summary else ""), login_shell=True))
+    typer.echo(run("idracct" + (" -s" if summary else ""), login_shell=True), nl=False)
 
 
 @app.command()
 def projects() -> None:
     """Display the projects or change the default project."""
-    typer.echo(run("idrproj", login_shell=True))
+    typer.echo(run("idrproj", login_shell=True), nl=False)
 
 
 @app.command()
@@ -34,7 +34,7 @@ def consumption(
         cmd += " -s"
     if accounts is not None:
         cmd += f" -A {','.join(accounts)}"
-    typer.echo(run(cmd, login_shell=True))
+    typer.echo(run(cmd, login_shell=True), nl=False)
 
 
 @app.command()
@@ -69,4 +69,4 @@ def disk_quota(
         cmd += f" -s {' '.join(space)}"
     if json:
         cmd += " -j"
-    typer.echo(run(cmd, login_shell=True))
+    typer.echo(run(cmd, login_shell=True), nl=False)

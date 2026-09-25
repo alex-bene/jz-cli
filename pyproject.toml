@@ -12,13 +12,15 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 requires-python = ">=3.8"
-dependencies = ["typer[all]", "rich"]
+# multidict is a dep of aiohttp anyway; listed only because we explicitly
+# import CIMultiDict in jz_cli/proxy/http.py.
+dependencies = ["typer[all]", "rich", "aiohttp>=3.9.0", "multidict>=4.5.0"]
 
 [project.scripts]
 jz = "jz_cli.main:app"
 
 [dependency-groups]
-dev = ["pre-commit>=3.5.0", "ruff>=0.13.3"]
+dev = ["pre-commit>=3.5.0", "pytest>=8.3.5", "ruff>=0.13.3"]
 
 [build-system]
 requires = ["hatchling"]

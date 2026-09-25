@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -24,21 +25,21 @@ def node_run(
 ) -> None:
     """Run command on allocated node based on job id. (accepts any srun options)."""
     cmd = f"srun --jobid {job_id} --overlap --ntasks=1 {command}"
-    typer.echo(run(cmd, login_shell=True))
+    typer.echo(run(cmd, login_shell=True), nl=False)
 
 
 @app.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
 def queue(ctx: typer.Context) -> None:
     """Show job queue for user. (accepts any squeue options)."""
     cmd = 'squeue -u $USER -o "%10i %9P %16j %2t %10M %10L %5D %15b %14N %R"' + " " + " ".join(ctx.args)
-    typer.echo(run(cmd, login_shell=True))
+    typer.echo(run(cmd, login_shell=True), nl=False)
 
 
 @app.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
 def info(ctx: typer.Context) -> None:
     """Show cluster info. (accepts any sinfo options)."""
     cmd = 'sinfo -O "Partition:15,Available:12,Time:15,NodeAIOT,GRES,Features:35"' + " ".join(ctx.args)
-    typer.echo(run(cmd, login_shell=True))
+    typer.echo(run(cmd, login_shell=True), nl=False)
 
 
 @app.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
@@ -54,7 +55,7 @@ def cancel(
     if job_id is None and all_jobs:
         cmd += " -u $USER"
     cmd += " " + " ".join(ctx.args)
-    typer.echo(run(cmd, login_shell=True))
+    typer.echo(run(cmd, login_shell=True), nl=False)
 
 
 @dataclass
@@ -240,15 +241,18 @@ srun {script}
     # Create file in jz with timestamp
     current_datetime = str(datetime.now().strftime("%Y%m%d%H%M%S"))  # noqa: DTZ005
     filepath = get_remote_base_dir(Path.cwd()) / f"sbatch_{current_datetime}.slurm"
-    run(f"cat > {filepath} <<EOF\n{sbatch_script}\nEOF")
+    # Quoted heredoc: the script body must reach the file verbatim, not be
+    # expanded by the login shell ($SLURM_JOB_ID, $SCRATCH, backticks, ...).
+    quoted_path = shlex.quote(str(filepath))
+    run(f"cat > {quoted_path} <<'EOF'\n{sbatch_script}\nEOF")
 
     # Make sure the file exists
     cmd_check_file = f"""
-if [ -f {filepath} ]; then
+if [ -f {quoted_path} ]; then
   echo "success"
 fi
 """
-    success = run(cmd_check_file, login_shell=True) == "success"
+    success = str(run(cmd_check_file, login_shell=True)).strip() == "success"
     if not success:
         typer.echo("❌ Failed to create file.")
         raise typer.Exit(1)

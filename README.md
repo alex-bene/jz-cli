@@ -14,7 +14,8 @@ This [`typer`](https://typer.tiangolo.com/)-based CLI simplifies common tasks su
 
 - **File Synchronization**: Sync your local project directory with the Jean Zay cluster using `rsync`.
 - **Persistent SSH Connections**: Maintain a persistent SSH connection for faster access and command execution.
-- **HTTP Proxies Over SSH**: Expose local HTTP endpoints that relay requests to services running on Jean Zay compute nodes.
+- **HTTP Proxies Over SSH**: Expose local HTTP endpoints that relay requests to services running on Jean Zay compute nodes, with optional method/path restrictions.
+- **TCP Tunnels Over SSH**: Expose a raw TCP tunnel to any port on a Jean Zay compute node for non-HTTP services.
 - **SCRATCH Timestamp Renewal**: Refresh timestamps under your remote `$SCRATCH`.
 - **SLURM Job Management**: View your job queue and cancel jobs.
 - **IDRIS Resource Management**: Check your resource allocations, project status, and disk quotas.
@@ -85,35 +86,49 @@ jz ssh stop
 
 ### `jz proxy`
 
-Expose a local HTTP endpoint that relays requests over ordinary SSH to a service running on a Jean Zay compute node.
+Expose a local HTTP or TCP endpoint that relays over ordinary SSH to a service running on a Jean Zay compute node.
 
 ```bash
 # Expose a generic HTTP service running on the compute node
-jz proxy serve --job-id 123456 --remote-port 8080 --local-port 8000
+jz proxy http --job-id 123456 --remote-port 8080 --local-port 8000
 
 # Restrict the proxy to a subset of paths
-jz proxy serve --node jzxh033 --remote-port 8080 --allow-prefix /api/
+jz proxy http --node jzxh033 --remote-port 8080 --allow-prefix /api/
 
-# Target a remote host other than localhost on the compute node
-jz proxy serve --node jzxh033 --remote-host 10.0.0.12 --remote-port 8080
+# Target a host other than the compute node, reachable from the login node
+jz proxy http --node jzxh033 --remote-host 10.0.0.12 --remote-port 8080
 
 # Allow only GET and POST through the generic proxy
-jz proxy serve --node jzxh033 --remote-port 8080 --allow-method GET --allow-method POST
+jz proxy http --node jzxh033 --remote-port 8080 --allow-method GET --allow-method POST
 
 # Use the OpenAI-specific wrapper for vLLM or another OpenAI-compatible server
 jz proxy openai --job-name vllm-serve --remote-port 8888 --local-port 8000
+
+# Reach a service bound to localhost on the compute node (two-hop form):
+# the relay connect is made from INSIDE the compute node
+jz proxy openai --node jzxh033 --remote-host localhost --remote-port 8888
+
+# Raw TCP tunnel for non-HTTP services (websockets, databases, TensorBoard, ...)
+jz proxy tcp --job-id 123456 --remote-port 8888 --local-port 8990
 ```
 
 Notes:
 
-- `jz proxy serve` is a generic HTTP proxy. It is not a raw TCP tunnel.
+- Responses stream incrementally, including `text/event-stream` and chunked upstream responses. `jz proxy openai` supports `"stream": true`.
+- Upstream HTTP keep-alive connections are reused: one SSH channel serves every request on a pooled connection, instead of one channel (SSH handshake) per request.
+- `jz proxy http` and `jz proxy openai` understand HTTP and can restrict what passes (see below). `jz proxy tcp` is a raw byte tunnel with no policy checks: it will forward any protocol to the port you name, so prefer an HTTP proxy when the traffic is HTTP.
 - Use exactly one of `--node`, `--job-id`, or `--job-name`.
-- `--allow-method` is repeatable. If omitted, all methods are allowed.
+- `--allow-method` is repeatable. If omitted, all supported HTTP methods are allowed; protocol upgrades and `CONNECT` require `jz proxy tcp`.
 - `--allow-prefix` is repeatable. If omitted, all paths are allowed.
-- `jz proxy openai` targets `localhost` on the compute node, allows only `GET` and `POST`, only forwards `/v1/` and `/health`, and rejects requests with `"stream": true`.
-- Every proxy also exposes a local health check at `/_jz/health`.
+- `jz proxy openai` allows only `GET`, `POST`, and `HEAD`, and only forwards `/v1/` and `/health`.
+- Request bodies are capped at `--max-body-mb` (default 64 MiB). The cap is per proxy and on a single request body; an OpenAI turn can replay the whole conversation, so a base64-inflated image attachment makes one turn's body much larger than the text you send.
+- `--remote-host` defaults to the resolved compute node and is connected to from the login node (one hop). The service must listen on an interface reachable from the login node; a server bound only to `127.0.0.1` on the compute node is reachable only via the two-hop form: pass `--remote-host localhost` (accepted by all three subcommands) and the relay connect is made from inside the compute node instead. Applies to `jz proxy http`, `jz proxy openai`, and `jz proxy tcp` alike.
+- Every HTTP proxy also exposes a local health check at `/_jz/health`.
 - This avoids SSH port forwarding, which Jean Zay disables.
 - `--job-id` is safer than `--job-name` if multiple similarly named jobs may be running.
+- The target node is resolved once at startup, so restart the proxy if the job ends or moves.
+- Idle relay channels close after 15 minutes without remote network activity; active SSE and other streaming responses reset that inactivity timer. Idle pooled connections are reconnected transparently.
+- HTTP requests use the remote destination in the forwarded `Host` header, rather than the proxy's local address.
 
 ### `jz scratch`
 
@@ -192,7 +207,10 @@ To contribute to this project, please ensure you have `uv` installed.
    ```bash
    uv run ruff check
    uv run ruff format
+   uv run pytest
    ```
+
+The proxy suite lives under [`tests/`](tests/).
 
 This project uses [Ruff](https://github.com/astral-sh/ruff) for linting and formatting. We use [pre-commit](https://pre-commit.com/) hooks to ensure code quality.
 

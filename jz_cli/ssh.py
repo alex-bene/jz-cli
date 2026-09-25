@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shlex
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -12,6 +13,9 @@ import typer
 from .config import get_value
 
 app = typer.Typer(help="""SSH tool for persistent connection and remote command execution.""")
+_MASTER_START_LOCK = threading.Lock()
+_MASTER_START_TIMEOUT_SECONDS = 5.0
+_MASTER_START_POLL_SECONDS = 0.1
 
 
 def get_remote_user() -> str:
@@ -47,25 +51,50 @@ def is_master_connection_active() -> bool:
     return result.returncode == 0
 
 
+def _master_start_error(proc: subprocess.CompletedProcess[str]) -> str:
+    """Return a one-line root-cause detail from a failed master-connection ssh."""
+    lines = (proc.stderr or "").strip().splitlines()
+    return lines[-1] if lines else f"ssh exited with {proc.returncode}"
+
+
 def start_master_connection(die_if_running: bool = False) -> None:
-    """Start the persistent SSH connection."""
-    if is_master_connection_active():
-        if die_if_running:
-            typer.echo("Master connection is already active.")
-            raise typer.Exit(0)
-        return
+    """Start the persistent SSH connection, serializing concurrent callers."""
+    try:
+        with _MASTER_START_LOCK:
+            if is_master_connection_active():
+                if die_if_running:
+                    typer.echo("Master connection is already active.")
+                    raise typer.Exit(0)
+                return
 
-    remote_user = get_remote_user()
-    typer.echo(f"Starting master connection for {remote_user}...")
-    cmd = ["ssh", "-M", *get_ssh_args(), "-fN", "-o", "ControlPersist=12h", remote_user]
-    subprocess.run(cmd, check=True)  # noqa: S603
-
-    # Wait a moment for the connection to be established
-    time.sleep(1)
-    if not is_master_connection_active():
-        typer.echo("Failed to start master connection.", err=True)
-        raise typer.Exit(1)
-    typer.echo("Master connection started successfully.")
+            remote_user = get_remote_user()
+            typer.echo(f"Starting master connection for {remote_user}...")
+            cmd = ["ssh", "-M", *get_ssh_args(), "-fN", "-o", "ControlPersist=12h", remote_user]
+            # Don't check: an independent CLI invocation may race us. If another
+            # process started the master in the meantime, treat it as success.
+            proc = subprocess.run(cmd, check=False, capture_output=True, text=True)  # noqa: S603
+            if proc.returncode != 0 and not is_master_connection_active():
+                # `ssh -f` fails only after authentication completes, so the outcome
+                # is already known; fail now instead of polling the full deadline.
+                typer.echo(f"Failed to start the master SSH connection: {_master_start_error(proc)}", err=True)
+                raise typer.Exit(1)
+            # `ssh -f` normally backgrounds only after authenticating, but poll for
+            # the control socket anyway instead of trusting a fixed wait.
+            deadline = time.monotonic() + _MASTER_START_TIMEOUT_SECONDS
+            while True:
+                if is_master_connection_active():
+                    typer.echo("Master connection started successfully.")
+                    return
+                if time.monotonic() >= deadline:
+                    typer.echo(f"Failed to start the master SSH connection: {_master_start_error(proc)}", err=True)
+                    raise typer.Exit(1)
+                time.sleep(_MASTER_START_POLL_SECONDS)
+    # CalledProcessError omitted deliberately: no subprocess here uses
+    # check=True (an independent CLI invocation may race the master start).
+    except OSError as exc:
+        msg = f"Failed to start the master SSH connection: {exc}"
+        typer.echo(msg, err=True)
+        raise typer.Exit(1) from exc
 
 
 def stop_master_connection() -> None:
@@ -80,6 +109,26 @@ def stop_master_connection() -> None:
     typer.echo("Master connection stopped.")
 
 
+def run_completed(
+    cmd: str,
+    *,
+    login_shell: bool = False,
+    capture_output: bool = True,
+    text: bool = True,
+    stdin_data: str | bytes | None = None,
+) -> subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes]:
+    """Run a command on Jean Zay and return the completed process without checking it."""
+    start_master_connection()
+    remote_cmd = f"bash -l -c {shlex.quote(cmd)}" if login_shell else cmd
+    return subprocess.run(  # noqa: S603
+        ["ssh", *get_ssh_args(), get_remote_user(), remote_cmd],
+        check=False,
+        capture_output=capture_output,
+        text=text,
+        input=stdin_data,
+    )
+
+
 def run(
     cmd: str,
     *,
@@ -87,27 +136,16 @@ def run(
     check: bool = True,
     capture_output: bool = True,
     text: bool = True,
-    return_result: bool = False,
     stdin_data: str | bytes | None = None,
-) -> str | bytes | subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes]:
-    """Run a command on Jean Zay programmatically."""
-    start_master_connection()
-    remote_cmd = f"bash -l -c {shlex.quote(cmd)}" if login_shell else cmd
-    result = subprocess.run(  # noqa: S603
-        ["ssh", *get_ssh_args(), get_remote_user(), remote_cmd],
-        check=False,
-        capture_output=capture_output,
-        text=text,
-        input=stdin_data,
+) -> str | bytes:
+    """Run a command on Jean Zay and return its stdout as a string (or bytes)."""
+    result = run_completed(
+        cmd, login_shell=login_shell, capture_output=capture_output, text=text, stdin_data=stdin_data
     )
     if check:
         result.check_returncode()
-    if return_result:
-        return result
-    if result.stdout is None:
-        return ""
-    if text:
-        return result.stdout.strip()
+    if not capture_output or result.stdout is None:
+        return "" if text else b""
     return result.stdout
 
 
@@ -115,11 +153,13 @@ def run(
 def run_command(
     cmd: str = typer.Argument(help="Command to run"),
     login_shell: bool = typer.Option(False, help="Login to shell (e.g. to load environment variables)"),
-) -> str | bytes | subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes]:
+) -> None:
     """Run a command to jz. If login_shell is True, the command will be run in a login shell (bash -l -c)."""
-    return run(
-        cmd, login_shell=login_shell, check=True, capture_output=True, text=True, return_result=False, stdin_data=None
-    )
+    result = run_completed(cmd, login_shell=login_shell)
+    typer.echo(result.stdout, nl=False)
+    typer.echo(result.stderr, nl=False, err=True)
+    if result.returncode != 0:
+        raise typer.Exit(result.returncode)
 
 
 @app.command()
